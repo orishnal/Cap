@@ -45,6 +45,19 @@ jobs:
       - name: Prepare native deps
         run: pnpm -w cap-setup
 
+      - name: Disable updater artifact generation for manual artifact build
+        working-directory: apps/desktop/src-tauri
+        shell: bash
+        run: |
+          node - <<'NODE'
+          const fs = require("fs");
+          const path = "tauri.conf.json";
+          const config = JSON.parse(fs.readFileSync(path, "utf8"));
+          config.bundle = config.bundle || {};
+          config.bundle.createUpdaterArtifacts = false;
+          fs.writeFileSync(path, `${JSON.stringify(config, null, "\t")}\n`);
+          NODE
+
       - name: Build unsigned app bundle
         working-directory: apps/desktop
         run: pnpm tauri build --debug --target aarch64-apple-darwin
@@ -57,12 +70,3 @@ jobs:
             target/aarch64-apple-darwin/debug/bundle/macos/*.app
             target/aarch64-apple-darwin/debug/bundle/dmg/*.dmg
           if-no-files-found: error
-
-      - name: Upload updater artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: cap-macos-arm64-updater-artifacts
-          path: |
-            target/aarch64-apple-darwin/debug/bundle/macos/*.tar.gz
-            target/aarch64-apple-darwin/debug/bundle/macos/*.sig
-          if-no-files-found: ignore
