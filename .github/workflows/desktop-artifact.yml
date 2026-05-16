@@ -1,0 +1,68 @@
+name: Desktop Artifact
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-macos-arm64-artifact:
+    name: Build macOS arm64 artifact
+    runs-on: macos-latest
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      RUST_TARGET_TRIPLE: aarch64-apple-darwin
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Rust setup
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - uses: ./.github/actions/setup-rust-cache
+        with:
+          target: aarch64-apple-darwin
+
+      - uses: ./.github/actions/setup-js
+
+      - name: Create .env file in root
+        shell: bash
+        run: |
+          echo "VITE_ENVIRONMENT=production" >> .env
+          echo "CAP_DESKTOP_SENTRY_URL=${{ secrets.CAP_DESKTOP_SENTRY_URL || 'https://examplePublicKey@o0.ingest.us.sentry.io/0' }}" >> .env
+          echo "NEXT_PUBLIC_WEB_URL=${{ secrets.NEXT_PUBLIC_WEB_URL || 'https://example.com' }}" >> .env
+          echo "NEXTAUTH_URL=${{ secrets.NEXT_PUBLIC_WEB_URL || 'https://example.com' }}" >> .env
+          echo "NEXT_PUBLIC_POSTHOG_KEY=${{ secrets.NEXT_PUBLIC_POSTHOG_KEY || 'phc_placeholder' }}" >> .env
+          echo "NEXT_PUBLIC_POSTHOG_HOST=${{ secrets.NEXT_PUBLIC_POSTHOG_HOST || 'https://us.i.posthog.com' }}" >> .env
+          echo "VITE_POSTHOG_KEY=${{ secrets.NEXT_PUBLIC_POSTHOG_KEY || 'phc_placeholder' }}" >> .env
+          echo "VITE_POSTHOG_HOST=${{ secrets.NEXT_PUBLIC_POSTHOG_HOST || 'https://us.i.posthog.com' }}" >> .env
+          echo "VITE_SERVER_URL=${{ secrets.NEXT_PUBLIC_WEB_URL || 'https://example.com' }}" >> .env
+
+      - name: Copy .env to apps/desktop
+        run: cp .env apps/desktop/.env
+
+      - name: Prepare native deps
+        run: pnpm -w cap-setup
+
+      - name: Build unsigned app bundle
+        working-directory: apps/desktop
+        run: pnpm tauri build --debug --target aarch64-apple-darwin
+
+      - name: Upload macOS app bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: cap-macos-arm64-app-bundle
+          path: |
+            target/aarch64-apple-darwin/debug/bundle/macos/*.app
+            target/aarch64-apple-darwin/debug/bundle/dmg/*.dmg
+          if-no-files-found: error
+
+      - name: Upload updater artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cap-macos-arm64-updater-artifacts
+          path: |
+            target/aarch64-apple-darwin/debug/bundle/macos/*.tar.gz
+            target/aarch64-apple-darwin/debug/bundle/macos/*.sig
+          if-no-files-found: ignore
